@@ -1,3 +1,3 @@
-module template
+module github.com/maragudk/logtailpipe
 
-go 1.19
+go 1.20
