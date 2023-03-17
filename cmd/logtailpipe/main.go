@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -42,33 +43,40 @@ type request struct {
 func pipe(log *log.Logger, client *http.Client, token string) error {
 	s := bufio.NewScanner(os.Stdin)
 
+	var wg sync.WaitGroup
+	defer wg.Done()
+
 	for s.Scan() {
 		line := s.Text()
+		now := time.Now()
 		if line == "\u0004" {
 			return nil
 		}
 		fmt.Println(line)
 
-		body := request{
-			Time:    time.Now().UTC().Format(time.RFC3339Nano),
-			Message: line,
-		}
+		wg.Add(1)
+		go func() {
+			body := request{
+				Time:    now.UTC().Format(time.RFC3339Nano),
+				Message: line,
+			}
 
-		bodyJSON, err := json.Marshal(body)
-		if err != nil {
-			return err
-		}
+			bodyJSON, err := json.Marshal(body)
+			if err != nil {
+				log.Println("Error creating JSON request:", err)
+			}
 
-		req, err := http.NewRequest(http.MethodPost, "https://in.logtail.com/", bytes.NewReader(bodyJSON))
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+token)
+			req, err := http.NewRequest(http.MethodPost, "https://in.logtail.com/", bytes.NewReader(bodyJSON))
+			if err != nil {
+				log.Println("Error creating request:", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+token)
 
-		if _, err := client.Do(req); err != nil {
-			log.Println("Error requesting:", err)
-		}
+			if _, err := client.Do(req); err != nil {
+				log.Println("Error requesting:", err)
+			}
+		}()
 	}
 
 	return s.Err()
